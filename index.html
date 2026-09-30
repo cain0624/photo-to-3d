@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>照片转 3D 场景 · Photo to 3D</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Three.js via CDN（浏览器联网加载） -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- ===================== 首页：照片墙 ===================== -->
+  <section id="wall-view" class="view active">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">◈</span>
+        <div class="brand-text">
+          <h1>照片转 3D 场景</h1>
+          <p>上传平面照片，生成可漫游的三维场景</p>
+        </div>
+      </div>
+      <button id="upload-btn" class="btn primary">
+        <span class="icon">＋</span> 上传照片
+      </button>
+      <input id="file-input" type="file" accept="image/*" multiple hidden />
+    </header>
+
+    <main class="wall-stage">
+      <button class="wall-nav prev" aria-label="向左滑动">‹</button>
+      <div id="photo-wall" class="photo-wall"></div>
+      <button class="wall-nav next" aria-label="向右滑动">›</button>
+    </main>
+
+    <footer class="hint-bar">
+      <span class="dot"></span>
+      点击任意场景卡片进入 3D 漫游 · 上传的照片将自动转换并存档
+    </footer>
+  </section>
+
+  <!-- ===================== 3D 场景漫游视图 ===================== -->
+  <section id="scene-view" class="view">
+    <div id="scene-canvas-wrap">
+      <canvas id="scene-canvas"></canvas>
+      <div id="loading-overlay" class="overlay">
+        <div class="conversion-backdrop" aria-hidden="true"></div>
+        <div class="conversion-frame" aria-hidden="true">
+          <img class="conversion-photo" alt="" />
+          <canvas class="conversion-mesh"></canvas>
+        </div>
+        <div class="conversion-status" role="status">
+          <p id="loading-text">正在生成三维场景…</p>
+          <div class="conversion-track"><span></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 顶部 HUD -->
+    <div class="scene-hud top">
+      <button id="back-btn" class="btn ghost">← 返回照片墙</button>
+      <div class="scene-title" id="scene-title">场景</div>
+      <div class="spacer"></div>
+      <button id="regen-btn" class="btn ghost" title="重新生成深度">↻ 重生成</button>
+    </div>
+
+    <!-- 底部控制面板 -->
+    <div class="scene-hud bottom">
+      <div class="control-panel">
+        <div class="ctrl-group">
+          <label>立体深度</label>
+          <input id="depth-slider" type="range" min="0" max="100" value="55" />
+        </div>
+        <div class="ctrl-group">
+          <label>地面范围</label>
+          <input id="fold-slider" type="range" min="0" max="100" value="45" />
+        </div>
+        <div class="ctrl-divider"></div>
+        <div class="keys-hint">
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移动</span>
+          <span><kbd>Shift</kbd> 加速</span>
+          <span><kbd>鼠标拖拽</kbd> 转视角</span>
+          <span><kbd>滚轮</kbd> 缩放</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 角色指示 -->
+    <div id="enter-hint" class="enter-hint">点击场景以激活操控</div>
+  </section>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
