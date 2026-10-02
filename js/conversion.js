@@ -6,7 +6,7 @@ const smooth = value => {
 };
 
 // The photo itself bends into depth before the live world is revealed.
-export function startPhotoMorph(canvas, image) {
+export function startPhotoMorph(canvas, image, plan) {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
@@ -41,8 +41,9 @@ export function startPhotoMorph(canvas, image) {
     photoMesh.scale.setScalar(1 + .27 * smooth(progress / .62));
     for (let i = 0; i < position.count; i++) {
       const u = uv.getX(i), v = uv.getY(i), j = i * 3;
-      const foreground = smooth((.36 - v) / .36);
-      const distance = smooth((v - .36) / .25);
+      const horizon=plan ? 1-plan.sky.horizon : .36;
+      const foreground = smooth((horizon - v) / Math.max(.15,horizon));
+      const distance = smooth((v - horizon) / .25);
       const sky = smooth((v - .62) / .38);
       const hill = Math.exp(-Math.pow((v - .52) / .075, 2)) * (1 - Math.abs(u - .5) * .35);
       const depth = 5.4 * foreground - 1.8 * distance - 3.2 * sky + 1.1 * hill;

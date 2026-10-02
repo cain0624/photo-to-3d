@@ -463,3 +463,9 @@ kbd {
   .ctrl-divider { display: none; }
 }
 .lakeside-controls .ctrl-group, .lakeside-controls .ctrl-divider { display: none; }
+
+#service-dialog { max-width: 520px; width: calc(100% - 48px); background: #171b25; color: #eceef4; border: 1px solid #454b5c; border-radius: 18px; padding: 28px; }
+#service-dialog::backdrop { background: rgba(0,0,0,.7); }
+#service-dialog p { line-height: 1.6; color: #b9c1d1; }
+#service-url { display: block; box-sizing: border-box; width: 100%; padding: 12px; margin-top: 8px; color: #eee; background: #10131b; border: 1px solid #555d70; border-radius: 8px; }
+#service-status { min-height: 26px; }

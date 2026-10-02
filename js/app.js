@@ -6,6 +6,7 @@ import { estimateDepth, depthToDataURL } from './depth-estimator.js';
 import { SceneBuilder } from './scene-builder.js';
 import { Character } from './character.js';
 import { startPhotoMorph } from './conversion.js';
+import { reconstruct, serviceUrl } from './reconstruction.js';
 
 // ---------- 图像工具 ----------
 function loadImage(src) {
@@ -49,25 +50,6 @@ function makeThumb(img, maxSide = 400) {
   return cv.toDataURL('image/jpeg', 0.82);
 }
 
-// Local edge extension for future portrait uploads; the curated 111 scene uses a full outpainted asset.
-async function expandPortrait(img) {
-  if (img.width >= img.height) return img;
-  const h = Math.min(img.height, 1080), w = Math.round(h * 16 / 9);
-  const centerW = Math.round(img.width * h / img.height), left = (w - centerW) / 2;
-  const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.filter = 'blur(36px)'; ctx.drawImage(img, -42, -42, w + 84, h + 84); ctx.filter = 'none';
-  const center = document.createElement('canvas'); center.width = w; center.height = h;
-  const cc = center.getContext('2d'); cc.drawImage(img, left, 0, centerW, h);
-  cc.globalCompositeOperation = 'destination-in';
-  const fade = cc.createLinearGradient(left, 0, left + centerW, 0);
-  fade.addColorStop(0, 'transparent'); fade.addColorStop(.08, 'black');
-  fade.addColorStop(.92, 'black'); fade.addColorStop(1, 'transparent');
-  cc.fillStyle = fade; cc.fillRect(left, 0, centerW, h);
-  ctx.drawImage(center, 0, 0);
-  return loadImage(canvas.toDataURL('image/jpeg', .9));
-}
-
 // 深度图 dataURL → Float32Array
 async function depthFromDataURL(url, w, h) {
   const img = await loadImage(url);
@@ -100,6 +82,7 @@ const App = {
     this.enterHint = document.getElementById('enter-hint');
 
     this.bindWallEvents();
+    this.bindServiceSettings();
     // One-time cleanup of the older demo scenes and archives.
     if (!localStorage.getItem('lakeside-only-v1')) {
       for (const scene of await Storage.getAll()) {
@@ -138,7 +121,7 @@ const App = {
 
   // ----- 转换并存档 -----
   async convertAndStore(img, { id, name, isDefault }) {
-    img = isDefault ? img : await expandPortrait(img);
+
     const imgData = getImageData(img, 480);
     await new Promise(r => setTimeout(r, 0)); // 让出主线程，spinner 可显示
     const depth = estimateDepth(imgData);
@@ -152,11 +135,13 @@ const App = {
     fullCv.getContext('2d').drawImage(img, 0, 0, fullCv.width, fullCv.height);
     const fullURL = fullCv.toDataURL('image/jpeg', 0.85);
 
+    const reconstruction = isDefault ? null : await reconstruct(fullURL);
     const record = {
       id, name, isDefault: !!isDefault,
       thumb, image: fullURL,
       depth: depthURL, depthW: depth.width, depthH: depth.height,
       settings: { depthStrength: 3.2, foldRatio: 0.4 },
+      plan: reconstruction?.plan, provenance: reconstruction?.provenance,
       createdAt: Date.now(),
     };
     await Storage.put(record);
@@ -182,14 +167,17 @@ const App = {
     const card = document.createElement('div');
     card.className = 'scene-card' + (s.isDefault ? ' default' : '');
     card.innerHTML = `
-      <img src="${s.thumb}" alt="${s.name}" loading="lazy" />
+      <img src="${s.thumb}" alt="照片" loading="lazy" />
       <div class="card-overlay">
         <div>
-          <div class="card-name">${s.name}</div>
+          <div class="card-name"></div>
           <div class="card-meta">${s.isDefault ? '默认场景' : '已存档'} · 点击进入</div>
         </div>
         <div class="enter-tag">进入 3D ›</div>
       </div>`;
+    card.querySelector('.card-name').textContent = s.name;
+    card.querySelector('img').alt = s.name;
+    card.querySelector('.card-meta').textContent = s.isDefault ? '默认场景 · 点击进入' : (s.plan ? '近似三维重建 · 点击进入' : '待升级 · 点击重新分析');
     card.addEventListener('click', () => this.enterScene(s.id));
     return card;
   },
@@ -242,6 +230,24 @@ const App = {
         this.renderWall();
       }
     }
+    document.getElementById('file-input').value = '';
+  },
+
+  bindServiceSettings() {
+    const dialog=document.getElementById('service-dialog'),input=document.getElementById('service-url'),status=document.getElementById('service-status');
+    document.getElementById('service-btn').onclick=()=>{input.value=serviceUrl();status.textContent='';dialog.showModal();};
+    document.getElementById('service-close').onclick=()=>dialog.close();
+    document.getElementById('service-save').onclick=async()=>{
+      try {
+        const url=new URL(input.value);
+        if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash)throw new Error('请输入不含密钥的 HTTP 或 HTTPS 后端地址');
+        const base=url.href.replace(/\/$/,'');
+        const response=await fetch(base+'/api/health',{signal:AbortSignal.timeout(8000)});
+        const health=await response.json();if(!response.ok)throw new Error('转换服务未响应');
+        localStorage.setItem('scene-service-url',base);
+        status.textContent=health.configured?'已连接，可以上传照片。':'已连接后端；请配置视觉模型后重启服务。';
+      }catch(e){status.textContent=e.message||'连接失败';}
+    };
   },
 
   // ----- 进入 3D 场景 -----
@@ -268,6 +274,14 @@ const App = {
       const rec = await Storage.get(id);
       if (!rec) throw new Error('场景不存在');
       if (token !== this._enterToken) return;
+      if (rec.id !== 'default-111' && !rec.plan) {
+        this.loadingText.textContent = '正在重新分析旧照片';
+        const result = await reconstruct(rec.image);
+        if(token !== this._enterToken) return;
+        rec.plan = result.plan; rec.provenance = result.provenance;
+        await Storage.put(rec);
+        Object.assign(this.scenes.find(s=>s.id===id), rec);
+      }
       this.activeScene = rec;
       const transitionImage = rec.id === 'default-111' ? 'assets/defaults/111-wide.png' : rec.image;
       this.loadingOverlay.querySelector('.conversion-photo').src = transitionImage;
@@ -285,7 +299,8 @@ const App = {
       this.loadingText.textContent = '照片正在立起来';
       this.loadingOverlay.classList.remove('preparing', 'converting', 'morphing');
       void this.loadingOverlay.offsetWidth;
-      try { this._stopMorph = startPhotoMorph(this.loadingOverlay.querySelector('.conversion-mesh'), photo); }
+      try { this.three.formationStarted = performance.now();
+        this._stopMorph = startPhotoMorph(this.loadingOverlay.querySelector('.conversion-mesh'), photo, rec.plan); }
       catch (error) { console.warn('空间变换动画不可用', error); }
       this.loadingOverlay.classList.add('converting', 'morphing');
       this._transitionTimers = [
@@ -327,7 +342,7 @@ const App = {
     const depth = isLakeside
       ? { data: new Float32Array(1), width: 1, height: 1 }
       : { data: await depthFromDataURL(rec.depth, rec.depthW, rec.depthH), width: rec.depthW, height: rec.depthH };
-    const grassImage = isLakeside ? await loadImage('assets/defaults/grass-meadow.png') : null;
+    const grassImage = await loadImage('assets/defaults/grass-meadow.png');
 
     this.disposeThree();
 
@@ -336,13 +351,13 @@ const App = {
     renderer.setPixelRatio(Math.min(2, devicePixelRatio));
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.shadowMap.enabled = rec.id === 'default-111';
+    renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(58, canvas.clientWidth / canvas.clientHeight, 0.1, 5000);
     // Preserve sharp nearby grass and cabins while distant ridges and sky soften.
-    const focus = rec.id === 'default-111' ? (() => {
+    const focus = (() => {
       const size = renderer.getDrawingBufferSize(new THREE.Vector2());
       const target = new THREE.WebGLRenderTarget(size.x, size.y, { depthTexture: new THREE.DepthTexture(size.x, size.y) });
       const uniforms = { tColor: { value: target.texture }, tDepth: { value: target.depthTexture }, resolution: { value: size }, near: { value: camera.near }, far: { value: camera.far } };
@@ -369,16 +384,16 @@ const App = {
       const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
       pass.add(quad);
       return { target, material, quad, pass, camera: new THREE.Camera() };
-    })() : null;
+    })();
 
     const builder = new SceneBuilder();
     const ds = rec.settings?.depthStrength ?? 3.2;
     const fr = rec.settings?.foldRatio ?? 0.4;
-    const { group, meta, fogColor } = builder.build(img, depth, { depthStrength: ds, foldRatio: fr, sceneId: rec.id, grassImage });
+    const { group, meta, fogColor } = builder.build(img, depth, { depthStrength: ds, foldRatio: fr, sceneId: rec.id, grassImage, plan: rec.plan });
     scene.add(group);
 
     // 雾: 两侧过渡到天空穹顶, 无硬边界
-    scene.fog = new THREE.Fog(fogColor.getHex(), rec.id === 'default-111' ? 160 : 16, rec.id === 'default-111' ? 280 : 52);
+    scene.fog = new THREE.Fog(fogColor.getHex(), 160, 380);
     scene.background = fogColor.clone();
 
     // 灯光: 半球光(天空→地面) + 柔和方向光
@@ -387,17 +402,25 @@ const App = {
     const dir = new THREE.DirectionalLight(rec.id === 'default-111' ? 0xffc575 : 0xffffff, rec.id === 'default-111' ? 1.3 : 0.6);
     dir.position.set(rec.id === 'default-111' ? -4 : -12, 20, rec.id === 'default-111' ? -35 : 7);
     if (rec.id === 'default-111') { dir.castShadow = true; dir.shadow.mapSize.set(2048, 2048); dir.shadow.camera.left = -70; dir.shadow.camera.right = 70; dir.shadow.camera.top = 70; dir.shadow.camera.bottom = -70; dir.shadow.normalBias = .025; }
-    scene.add(dir);
+    scene.add(dir,dir.target);
     const dir2 = new THREE.DirectionalLight(0xb0c4ff, 0.25);
     dir2.position.set(5, 6, -5);
     scene.add(dir2);
+    if(rec.plan){
+      const l=rec.plan.lighting;hemi.color.set(l.ambientColor);hemi.intensity=l.ambientIntensity;
+      dir.color.set(l.color);dir.intensity=l.intensity;dir.position.set(...l.sunDirection).multiplyScalar(100);
+      dir2.intensity=.08;dir.castShadow=true;dir.shadow.mapSize.set(2048,2048);
+      Object.assign(dir.shadow.camera,{left:-90,right:90,top:90,bottom:-90,far:500});dir.shadow.normalBias=.025;
+    }
 
     // 角色
     const character = new Character(camera, canvas);
     character.setBounds(meta.bounds);
     character.setTerrain(meta.heightAt);
+    character.setWalkable(meta.canWalk);
     const startZ = rec.id === 'default-111' ? 45 : Math.min(meta.bounds.maxZ, Math.max(meta.bounds.minZ + 1, meta.bounds.maxZ * 0.7));
     character.reset(0, startZ);
+    if(meta.spawn){character.reset(meta.spawn.x,meta.spawn.z);character.camYaw=meta.spawn.yaw;character.camPitch=meta.spawn.pitch;character.camDist=meta.spawn.distance;character.lookLift=1.8;character.update(0);}
     if (rec.id === 'default-111') { character.camPitch = 0.38; character.camDist = 13; character.lookLift = 1.8; character.update(0); }
     character.attach();
     scene.add(character.group);
@@ -407,9 +430,12 @@ const App = {
 
     const loop = () => {
       raf = requestAnimationFrame(loop);
+      if(this.three?.renderer === renderer) this.three.raf = raf;
       const dt = clock.getDelta();
       character.update(dt);
       builder.update(dt);
+      if(rec.plan){dir.target.position.copy(character.group.position);dir.position.copy(dir.target.position).addScaledVector(new THREE.Vector3(...rec.plan.lighting.sunDirection).normalize(),100);}
+      if(this.three?.formationStarted){const p=Math.min(1,(performance.now()-this.three.formationStarted)/3000);builder.setFormation(p*p*(3-2*p));}
       if (focus) {
         renderer.setRenderTarget(focus.target);
         renderer.render(scene, camera);
@@ -433,14 +459,14 @@ const App = {
     };
     window.addEventListener('resize', onResize);
 
-    this.three = { renderer, scene, camera, builder, character, clock, raf, onResize, img, depth, meta, focus };
+    this.three = { renderer, scene, camera, builder, character, clock, raf, onResize, img, depth, meta, focus, grassImage };
 
     // 绑定场景内控件
     this.bindSceneControls(rec);
   },
 
   bindSceneControls(rec) {
-    document.querySelector('.control-panel').classList.toggle('lakeside-controls', rec.id === 'default-111');
+    document.querySelector('.control-panel').classList.add('lakeside-controls');
     const depthSlider = document.getElementById('depth-slider');
     const foldSlider = document.getElementById('fold-slider');
     const regenBtn = document.getElementById('regen-btn');
@@ -452,11 +478,13 @@ const App = {
     };
     depthSlider.oninput = schedule;
     foldSlider.oninput = schedule;
-    regenBtn.textContent = rec.id === 'default-111' ? '回到起点' : '↻ 重生成';
-    regenBtn.title = rec.id === 'default-111' ? '回到湖岸起点' : '重新生成深度';
-    regenBtn.onclick = rec.id === 'default-111'
-      ? () => { this.three?.character.reset(0, 45); this.three.character.camPitch = 0.38; this.three.character.camDist = 13; this.three.character.lookLift = 1.8; this.three.character.update(0); }
-      : () => this.rebuildScene(rec, true);
+    regenBtn.textContent = '回到起点';
+    regenBtn.title = '回到场景起点';
+    regenBtn.onclick = () => {
+      const t=this.three;if(!t)return;
+      const sp=t.meta.spawn || {x:0,z:45,yaw:0,pitch:.38,distance:13};
+      t.character.reset(sp.x,sp.z);t.character.camYaw=sp.yaw;t.character.camPitch=sp.pitch;t.character.camDist=sp.distance;t.character.lookLift=1.8;t.character.update(0);
+    };
 
     document.getElementById('back-btn').onclick = () => this.exitScene();
 
@@ -479,10 +507,11 @@ const App = {
 
     const { scene, builder, character, img, depth } = this.three;
     if (builder.group) scene.remove(builder.group);
-    const res = builder.build(img, depth, { depthStrength: ds, foldRatio: fr, sceneId: rec.id });
+    const res = builder.build(img, depth, { depthStrength: ds, foldRatio: fr, sceneId: rec.id, plan: rec.plan, grassImage: this.three.grassImage });
     scene.add(res.group);
     character.setBounds(res.meta.bounds);
     character.setTerrain(res.meta.heightAt);
+    character.setWalkable(res.meta.canWalk);
     scene.fog.color = res.fogColor;
     scene.background = res.fogColor.clone();
     this.three.meta = res.meta;

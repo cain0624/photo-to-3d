@@ -25,6 +25,7 @@
           <p>上传平面照片，生成可漫游的三维场景</p>
         </div>
       </div>
+      <button id="service-btn" class="btn ghost">转换服务</button>
       <button id="upload-btn" class="btn primary">
         <span class="icon">＋</span> 上传照片
       </button>
@@ -93,6 +94,16 @@
     <div id="enter-hint" class="enter-hint">点击场景以激活操控</div>
   </section>
 
+  <dialog id="service-dialog">
+    <h2>连接照片转换服务</h2>
+    <p>先在电脑启动本地后端，再连接服务。照片会发送到该后端所配置的视觉模型，用于近似重建。</p>
+    <label for="service-url">后端地址</label>
+    <input id="service-url" type="url" placeholder="http://127.0.0.1:8766" />
+    <p>密钥只在后端配置。GitHub Pages 可连接已部署的 HTTPS 后端；使用本地服务时建议打开本地网站。</p>
+    <p id="service-status" role="status"></p>
+    <button id="service-save" class="btn primary">连接并保存</button>
+    <button id="service-close" class="btn ghost">关闭</button>
+  </dialog>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -78,6 +78,7 @@ export class Character {
 
   setBounds(b) { this.bounds = b; }
   setTerrain(fn) { this.terrainFn = fn; }
+  setWalkable(fn) { this.walkableFn = fn; }
   setEnabled(v) { this._enabled = v; }
 
   _bindEvents() {
@@ -157,11 +158,14 @@ export class Character {
     const moving = move.lengthSq() > 0.0001;
     if (moving) move.normalize();
 
+    const oldX=this.pos.x,oldZ=this.pos.z;
     this.pos.addScaledVector(move, baseSpeed * dt);
 
     const b = this.bounds;
     this.pos.x = Math.max(b.minX, Math.min(b.maxX, this.pos.x));
     this.pos.z = Math.max(b.minZ, Math.min(b.maxZ, this.pos.z));
+
+    if(this.walkableFn && !this.walkableFn(this.pos.x,this.pos.z)){this.pos.x=oldX;this.pos.z=oldZ;}
 
     if (moving) {
       const targetFacing = Math.atan2(move.x, move.z);
