@@ -28,7 +28,7 @@ class Tests(unittest.TestCase):
         server=ThreadingHTTPServer(('127.0.0.1',0),mod.Handler);threading.Thread(target=server.serve_forever,daemon=True).start()
         old=dict(os.environ)
         try:
-            os.environ.update(SCENE_VISION_KEY='test-key',SCENE_VISION_MODEL='test-model',SCENE_VISION_BASE_URL=f'http://127.0.0.1:{upstream.server_port}/v1')
+            os.environ.update(SCENE_PROVIDER='vision',SCENE_VISION_KEY='test-key',SCENE_VISION_MODEL='test-model',SCENE_VISION_BASE_URL=f'http://127.0.0.1:{upstream.server_port}/v1')
             base=f'http://127.0.0.1:{server.server_port}'
             data=json.dumps({'image':'data:image/png;base64,'+base64.b64encode(b'contract-test-image').decode()}).encode()
             d=json.load(urllib.request.urlopen(urllib.request.Request(base+'/api/reconstruct',data=data,headers={'Content-Type':'application/json'})))

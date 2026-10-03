@@ -1,5 +1,7 @@
 """Local static website + vision-to-scene API. No third-party Python packages."""
-import base64, json, math, os, re, threading, urllib.request, urllib.error
+import base64, json, math, os, re, threading, urllib.request, urllib.error, sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+import marble
 from pathlib import Path
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,7 +80,16 @@ class Handler(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204);self.send_header('Access-Control-Allow-Methods','GET, POST, OPTIONS');self.send_header('Access-Control-Allow-Headers','Content-Type');self.end_headers()
     def do_GET(self):
-        if self.path=='/api/health':return self.reply(200,{'configured':bool(os.getenv('SCENE_VISION_MODEL') and os.getenv('SCENE_VISION_KEY')),'provider': 'vision-scene-v1'})
+        if self.path=='/api/health':
+            provider=os.getenv('SCENE_PROVIDER','vision')
+            return self.reply(200,{'configured':bool(os.getenv('MARBLE_API_KEY')) if provider=='marble' else bool(os.getenv('SCENE_VISION_MODEL') and os.getenv('SCENE_VISION_KEY')),'provider':provider})
+        if self.path.startswith('/api/marble/jobs/'):
+            try:
+                ticket=self.path.rsplit('/',1)[1].split('?',1)[0]
+                return self.reply(200,marble.status(ticket,refresh='refresh=1' in self.path))
+            except ValueError as e:return self.reply(422,{'error':str(e)})
+            except urllib.error.HTTPError as e:return self.reply(502,{'error':f'Marble HTTP {e.code}: check API key, credits and permissions'})
+            except Exception:return self.reply(502,{'error':'Marble connection failed; retry this job'})
         # Never expose keys, backend sources or git files through the static server.
         from urllib.parse import unquote,urlsplit
         parts=Path(unquote(urlsplit(self.path).path)).parts
@@ -90,7 +101,8 @@ class Handler(SimpleHTTPRequestHandler):
         allowed={'https://cain0624.github.io',f'http://127.0.0.1:{self.server.server_port}',f'http://localhost:{self.server.server_port}'}
         allowed.update(filter(None,os.environ.get('SCENE_ALLOWED_ORIGINS','').split(',')))
         if origin and origin not in allowed:return self.reply(403,{'error':'该网页来源未获后端授权'})
-        if not os.getenv('SCENE_VISION_KEY') or not os.getenv('SCENE_VISION_MODEL'):return self.reply(503,{'error':'请先在本地 .env.local 配置视觉模型和密钥，再重启后端。'})
+        if os.getenv('SCENE_PROVIDER','vision')=='marble' and not os.getenv('MARBLE_API_KEY'):return self.reply(503,{'error':'请先在 .env.local 配置 MARBLE_API_KEY，再重启后端。'})
+        if os.getenv('SCENE_PROVIDER','vision')!='marble' and (not os.getenv('SCENE_VISION_KEY') or not os.getenv('SCENE_VISION_MODEL')):return self.reply(503,{'error':'请先在本地 .env.local 配置视觉模型和密钥，再重启后端。'})
         if not BUSY.acquire(blocking=False):return self.reply(429,{'error':'当前生成任务较多，请稍后重试'})
         try:
             length=int(self.headers.get('Content-Length','0'))
@@ -99,6 +111,7 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(image,str) or not re.match(r'^data:image/(jpeg|png|webp);base64,',image):raise ValueError('请上传JPEG、PNG或WebP图片')
             raw=base64.b64decode(image.split(',',1)[1],validate=True)
             if not raw or len(raw)>4_000_000:raise ValueError('图片为空或超出限制')
+            if os.getenv('SCENE_PROVIDER','vision')=='marble':return self.reply(202,marble.start(image,payload.get('name')))
             body={'model':os.environ['SCENE_VISION_MODEL'],'messages':[{'role':'system','content':PROMPT},{'role':'user','content':[{'type':'text','text':'Analyze the supplied photo. Return the complete scene schema.'},{'type':'image_url','image_url':{'url':image}}]}],'response_format':{'type':'json_object'}}
             url=os.getenv('SCENE_VISION_BASE_URL','https://api.openai.com/v1').rstrip('/')+'/chat/completions'
             request=urllib.request.Request(url,data=json.dumps(body).encode(),headers={'Authorization':'Bearer '+os.environ['SCENE_VISION_KEY'],'Content-Type':'application/json'})

@@ -9,7 +9,9 @@
   <script type="importmap">
   {
     "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+      "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.3.1/dist/spark.module.js"
     }
   }
   </script>
@@ -96,7 +98,7 @@
 
   <dialog id="service-dialog">
     <h2>连接照片转换服务</h2>
-    <p>先在电脑启动本地后端，再连接服务。照片会发送到该后端所配置的视觉模型，用于近似重建。</p>
+    <p>先在电脑启动本地后端，再连接服务。照片会发送到后端配置的服务。Marble 将生成可探索的三维世界，通常需要等待几分钟；生成会消耗你的 World API 额度。</p>
     <label for="service-url">后端地址</label>
     <input id="service-url" type="url" placeholder="http://127.0.0.1:8766" />
     <p>密钥只在后端配置。GitHub Pages 可连接已部署的 HTTPS 后端；使用本地服务时建议打开本地网站。</p>

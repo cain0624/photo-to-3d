@@ -13,7 +13,14 @@ export class SceneBuilder {
     this.updateWorld = world.update;
     return world;
   }
-  setFormation(value) { if(this.group) this.group.scale.y = Math.max(.02,value); }
+  async buildMarble(world, renderer) {
+    this.dispose();
+    const { buildMarble } = await import('./marble-world.js');
+    const result = await buildMarble(world,renderer);
+    this.group=result.group;this.disposables=result.resources;this.meta=result.meta;this.isMarble=true;
+    return result;
+  }
+  setFormation(value) { if(this.group && !this.isMarble) this.group.scale.y = Math.max(.02,value); }
   update(dt) { this.updateWorld?.(dt); }
   dispose() {
     this.updateWorld = null;

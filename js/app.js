@@ -6,7 +6,7 @@ import { estimateDepth, depthToDataURL } from './depth-estimator.js';
 import { SceneBuilder } from './scene-builder.js';
 import { Character } from './character.js';
 import { startPhotoMorph } from './conversion.js';
-import { reconstruct, serviceUrl } from './reconstruction.js';
+import { reconstruct, serviceUrl, refreshMarble } from './reconstruction.js';
 
 // ---------- 图像工具 ----------
 function loadImage(src) {
@@ -120,7 +120,7 @@ const App = {
   },
 
   // ----- 转换并存档 -----
-  async convertAndStore(img, { id, name, isDefault }) {
+  async convertAndStore(img, { id, name, isDefault, onProgress }) {
 
     const imgData = getImageData(img, 480);
     await new Promise(r => setTimeout(r, 0)); // 让出主线程，spinner 可显示
@@ -135,15 +135,17 @@ const App = {
     fullCv.getContext('2d').drawImage(img, 0, 0, fullCv.width, fullCv.height);
     const fullURL = fullCv.toDataURL('image/jpeg', 0.85);
 
-    const reconstruction = isDefault ? null : await reconstruct(fullURL);
     const record = {
       id, name, isDefault: !!isDefault,
       thumb, image: fullURL,
       depth: depthURL, depthW: depth.width, depthH: depth.height,
       settings: { depthStrength: 3.2, foldRatio: 0.4 },
-      plan: reconstruction?.plan, provenance: reconstruction?.provenance,
       createdAt: Date.now(),
     };
+    if(!isDefault){
+      const result=await reconstruct(fullURL,{name,onProgress,onJob:async job=>{record.marbleJob=job;await Storage.put(record);}});
+      record.plan=result.plan;record.world=result.world;record.provenance=result.provenance;delete record.marbleJob;
+    }
     await Storage.put(record);
     return record;
   },
@@ -177,7 +179,7 @@ const App = {
       </div>`;
     card.querySelector('.card-name').textContent = s.name;
     card.querySelector('img').alt = s.name;
-    card.querySelector('.card-meta').textContent = s.isDefault ? '默认场景 · 点击进入' : (s.plan ? '近似三维重建 · 点击进入' : '待升级 · 点击重新分析');
+    card.querySelector('.card-meta').textContent = s.isDefault ? '默认场景 · 点击进入' : (s.world ? 'Marble 三维世界 · 点击进入' : s.marbleJob ? '生成任务已保存 · 点击继续' : s.plan ? '近似三维重建 · 点击进入' : '待升级 · 点击重新分析');
     card.addEventListener('click', () => this.enterScene(s.id));
     return card;
   },
@@ -220,13 +222,14 @@ const App = {
         const img = await loadImage(url);
         const name = file.name.replace(/\.[^.]+$/, '') || '未命名';
         const id = 'scene-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-        const rec = await this.convertAndStore(img, { id, name, isDefault: false });
+        const rec = await this.convertAndStore(img, { id, name, isDefault: false, onProgress:text=>{card.querySelector('.proc-bar div:last-child').textContent=text;} });
         this.scenes.push(rec);
       } catch (e) {
         console.error(e);
         alert('转换失败: ' + (e?.message || e));
       } finally {
         card.remove();
+        await this.loadScenes();
         this.renderWall();
       }
     }
@@ -245,7 +248,7 @@ const App = {
         const response=await fetch(base+'/api/health',{signal:AbortSignal.timeout(8000)});
         const health=await response.json();if(!response.ok)throw new Error('转换服务未响应');
         localStorage.setItem('scene-service-url',base);
-        status.textContent=health.configured?'已连接，可以上传照片。':'已连接后端；请配置视觉模型后重启服务。';
+        status.textContent=health.configured?`已连接 ${health.provider==='marble'?'Marble':'视觉模型'}，可以上传照片。`:`已连接后端；请配置 ${health.provider==='marble'?'MARBLE_API_KEY':'视觉模型'} 后重启服务。`;
       }catch(e){status.textContent=e.message||'连接失败';}
     };
   },
@@ -255,6 +258,7 @@ const App = {
     if (this._entering) return;
     this._entering = true;
     const token = this._enterToken = (this._enterToken || 0) + 1;
+    this._enterAbort=new AbortController();
     const previewRecord = this.scenes.find(scene => scene.id === id);
     const previewImage = id === 'default-111' ? 'assets/defaults/111-wide.png' : previewRecord?.image;
     if (previewImage) {
@@ -267,6 +271,7 @@ const App = {
     this.loadingOverlay.classList.remove('hidden');
     this.loadingOverlay.setAttribute('aria-hidden', 'false');
     this.showSceneView(true);
+    document.getElementById('back-btn').onclick=()=>this.exitScene();
     this.loadingText.textContent = '读取照片';
     this.enterHint.classList.add('hidden');
 
@@ -274,11 +279,11 @@ const App = {
       const rec = await Storage.get(id);
       if (!rec) throw new Error('场景不存在');
       if (token !== this._enterToken) return;
-      if (rec.id !== 'default-111' && !rec.plan) {
+      if (rec.id !== 'default-111' && !rec.plan && !rec.world) {
         this.loadingText.textContent = '正在重新分析旧照片';
-        const result = await reconstruct(rec.image);
+        const result = await reconstruct(rec.image,{name:rec.name,job:rec.marbleJob,signal:this._enterAbort.signal,onJob:async job=>{rec.marbleJob=job;await Storage.put(rec);},onProgress:text=>{if(token===this._enterToken)this.loadingText.textContent=text;}});
         if(token !== this._enterToken) return;
-        rec.plan = result.plan; rec.provenance = result.provenance;
+        rec.plan = result.plan; rec.world = result.world; rec.provenance = result.provenance;delete rec.marbleJob;
         await Storage.put(rec);
         Object.assign(this.scenes.find(s=>s.id===id), rec);
       }
@@ -322,6 +327,7 @@ const App = {
         this.loadingOverlay.classList.remove('morphing', 'converting', 'preparing');
       }, 450));
     } catch (e) {
+      if(token !== this._enterToken)return;
       console.error(e);
       this._lastError = e?.stack || String(e);
       this.disposeThree();
@@ -331,11 +337,12 @@ const App = {
       this.sceneView.classList.remove('is-converting');
       this.loadingText.textContent = '场景生成失败: ' + (e?.message || e);
     } finally {
-      this._entering = false;
+      if(token===this._enterToken)this._entering = false;
     }
   },
 
   async buildThree(rec) {
+    const buildToken=this._enterToken;
     await new Promise(r => setTimeout(r, 30));
     const isLakeside = rec.id === 'default-111';
     const img = await loadImage(isLakeside ? 'assets/defaults/111-wide.png' : rec.image);
@@ -344,6 +351,7 @@ const App = {
       : { data: await depthFromDataURL(rec.depth, rec.depthW, rec.depthH), width: rec.depthW, height: rec.depthH };
     const grassImage = await loadImage('assets/defaults/grass-meadow.png');
 
+    if(buildToken!==this._enterToken)throw new Error('场景加载已取消');
     this.disposeThree();
 
     const canvas = document.getElementById('scene-canvas');
@@ -357,7 +365,7 @@ const App = {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(58, canvas.clientWidth / canvas.clientHeight, 0.1, 5000);
     // Preserve sharp nearby grass and cabins while distant ridges and sky soften.
-    const focus = (() => {
+    const focus = rec.world ? null : (() => {
       const size = renderer.getDrawingBufferSize(new THREE.Vector2());
       const target = new THREE.WebGLRenderTarget(size.x, size.y, { depthTexture: new THREE.DepthTexture(size.x, size.y) });
       const uniforms = { tColor: { value: target.texture }, tDepth: { value: target.depthTexture }, resolution: { value: size }, near: { value: camera.near }, far: { value: camera.far } };
@@ -387,13 +395,21 @@ const App = {
     })();
 
     const builder = new SceneBuilder();
+    this.three={renderer,scene,camera,builder,focus};
     const ds = rec.settings?.depthStrength ?? 3.2;
     const fr = rec.settings?.foldRatio ?? 0.4;
-    const { group, meta, fogColor } = builder.build(img, depth, { depthStrength: ds, foldRatio: fr, sceneId: rec.id, grassImage, plan: rec.plan });
+    let result;
+    if(rec.world){
+      // Saved URLs can expire. Refresh the same world, never regenerate it.
+      rec.world=await refreshMarble(rec.world);await Storage.put(rec);
+      result=await builder.buildMarble(rec.world,renderer);
+    }else result=builder.build(img,depth,{depthStrength:ds,foldRatio:fr,sceneId:rec.id,grassImage,plan:rec.plan});
+    if(buildToken!==this._enterToken){builder.dispose();renderer.dispose();throw new Error('场景加载已取消');}
+    const {group,meta,fogColor}=result;
     scene.add(group);
 
     // 雾: 两侧过渡到天空穹顶, 无硬边界
-    scene.fog = new THREE.Fog(fogColor.getHex(), 160, 380);
+    scene.fog = rec.world ? null : new THREE.Fog(fogColor.getHex(), 160, 380);
     scene.background = fogColor.clone();
 
     // 灯光: 半球光(天空→地面) + 柔和方向光
@@ -413,6 +429,8 @@ const App = {
       Object.assign(dir.shadow.camera,{left:-90,right:90,top:90,bottom:-90,far:500});dir.shadow.normalBias=.025;
     }
 
+    if(rec.world){dir.castShadow=true;dir.shadow.mapSize.set(1024,1024);Object.assign(dir.shadow.camera,{left:-20,right:20,top:20,bottom:-20,far:100});dir.shadow.normalBias=.02;}
+
     // 角色
     const character = new Character(camera, canvas);
     character.setBounds(meta.bounds);
@@ -420,7 +438,7 @@ const App = {
     character.setWalkable(meta.canWalk);
     const startZ = rec.id === 'default-111' ? 45 : Math.min(meta.bounds.maxZ, Math.max(meta.bounds.minZ + 1, meta.bounds.maxZ * 0.7));
     character.reset(0, startZ);
-    if(meta.spawn){character.reset(meta.spawn.x,meta.spawn.z);character.camYaw=meta.spawn.yaw;character.camPitch=meta.spawn.pitch;character.camDist=meta.spawn.distance;character.lookLift=1.8;character.update(0);}
+    if(meta.spawn){character.reset(meta.spawn.x,meta.spawn.z);character.camYaw=meta.spawn.yaw;character.camPitch=meta.spawn.pitch;character.camDist=meta.spawn.distance;character.lookLift=rec.world?.25:1.8;character.update(0);}
     if (rec.id === 'default-111') { character.camPitch = 0.38; character.camDist = 13; character.lookLift = 1.8; character.update(0); }
     character.attach();
     scene.add(character.group);
@@ -483,7 +501,7 @@ const App = {
     regenBtn.onclick = () => {
       const t=this.three;if(!t)return;
       const sp=t.meta.spawn || {x:0,z:45,yaw:0,pitch:.38,distance:13};
-      t.character.reset(sp.x,sp.z);t.character.camYaw=sp.yaw;t.character.camPitch=sp.pitch;t.character.camDist=sp.distance;t.character.lookLift=1.8;t.character.update(0);
+      t.meta.resetGround?.();t.character.reset(sp.x,sp.z);t.character.camYaw=sp.yaw;t.character.camPitch=sp.pitch;t.character.camDist=sp.distance;t.character.lookLift=rec.world?.25:1.8;t.character.update(0);
     };
 
     document.getElementById('back-btn').onclick = () => this.exitScene();
@@ -499,7 +517,7 @@ const App = {
   },
 
   async rebuildScene(rec, force = false) {
-    if (!this.three) return;
+    if (!this.three || rec.world) return;
     const ds = this.depthFromSlider(+document.getElementById('depth-slider').value);
     const fr = this.foldFromSlider(+document.getElementById('fold-slider').value);
     rec.settings = { depthStrength: ds, foldRatio: fr };
@@ -519,6 +537,7 @@ const App = {
 
   exitScene() {
     this._enterToken = (this._enterToken || 0) + 1;
+    this._entering=false;this._enterAbort?.abort();
     this._transitionTimers?.forEach(clearTimeout);
     this._stopMorph?.(); this._stopMorph = null;
     this.loadingOverlay.classList.remove('converting', 'morphing', 'preparing');
