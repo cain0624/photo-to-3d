@@ -93,12 +93,7 @@
       </div>
     </div>
 
-    <aside id="quest-panel" aria-label="三星探索任务">
-      <div class="quest-heading"><span>湖岸的三个相遇</span><strong id="quest-stars" aria-label="已收集零颗星">☆ ☆ ☆</strong></div>
-      <p id="quest-summary">找到三位 NPC，靠近各收集一颗星。</p>
-      <ul id="quest-list"></ul>
-      <button id="quest-replay" class="btn ghost" hidden>再探索一次</button>
-    </aside>
+    <div id="star-progress" aria-label="星星收集进度"><strong id="quest-stars" aria-label="已收集零颗星">☆ ☆ ☆</strong></div>
     <div id="quest-toast" role="status" aria-live="polite"></div>
     <!-- 角色指示 -->
     <div id="enter-hint" class="enter-hint">点击场景以激活操控</div>
@@ -113,6 +108,7 @@
     <p class="story-help">用三句话或三行描述三位角色和位置。支持松鼠、螃蟹、伐木人、兔、猫、狗；其他人物使用旅人造型。每位 NPC 带一颗星。</p>
     <div id="story-preview" aria-label="NPC 预览"></div>
     <p id="story-status" role="status"></p>
+    <button id="quest-replay" class="btn ghost" hidden>重新收集星星</button>
     <div class="story-actions"><span>保存新故事会重新开始三星任务</span><button id="story-save" class="btn primary">创建 3 位 NPC</button></div>
     <p class="story-footnote">故事在浏览器内按关键词解析。没有对应地物的位置会放在可行走的出生点附近。故事与进度仅保存在这台设备。</p>
   </dialog>

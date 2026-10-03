@@ -311,23 +311,22 @@ const App = {
       const snapshot=structuredClone(rec);
       this._questSave=(this._questSave||Promise.resolve()).then(()=>Storage.put(snapshot)).catch(()=>{if(this.activeScene===rec)this.questToast('本机存档失败，当前探索仍可继续。');});
     });
-    this._questListKey=null;this.renderQuest();
+    this.renderQuest();
   },
 
   renderQuest() {
     const rec=this.activeScene,t=this.three,quest=rec?.storyQuest;if(!quest||!t?.character)return;
     const count=quest.collected.length,stars=document.getElementById('quest-stars');stars.textContent=Array.from({length:3},(_,i)=>i<count?'★':'☆').join(' ');stars.setAttribute('aria-label',`已收集 ${count} / 3 颗星`);
-    document.querySelector('.quest-heading span').textContent=rec.id==='default-111'?'湖岸的三个相遇':'照片里的三个相遇';
-    document.getElementById('quest-summary').textContent=count===3?'三星集齐，故事中的相遇都找到了。':'靠近 NPC 自动收星 · '+count+'/3';
     document.getElementById('quest-replay').hidden=count!==3;
-    const distances=quest.npcs.map(n=>Math.round(Math.hypot(n.x-t.character.pos.x,n.z-t.character.pos.z)));
-    const key=quest.text+quest.collected.join()+distances.join();if(key===this._questListKey)return;this._questListKey=key;
-    const list=document.getElementById('quest-list');list.replaceChildren();
-    quest.npcs.forEach((npc,i)=>{const li=document.createElement('li'),name=document.createElement('span'),state=document.createElement('small'),done=quest.collected.includes(npc.id);name.textContent=(done?'★ ':'☆ ')+npc.name;state.textContent=done?'已相遇':distances[i]+' 米';li.classList.toggle('done',done);li.append(name,state);list.append(li);});
+    if(stars.dataset.count!==undefined && count>Number(stars.dataset.count)){
+      stars.classList.remove('star-collected');void stars.offsetWidth;stars.classList.add('star-collected');
+    }
+    stars.dataset.count=String(count);
   },
 
   questToast(text) {
-    const el=document.getElementById('quest-toast');el.textContent=text;el.classList.add('visible');clearTimeout(this._toastTimer);this._toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);
+    const el=document.getElementById('quest-toast');el.textContent=text;// Keep routine feedback in the live region; the visible feedback is the three stars.
+    clearTimeout(this._toastTimer);this._toastTimer=setTimeout(()=>{el.textContent='';},3500);
   },
 
   // ----- 进入 3D 场景 -----

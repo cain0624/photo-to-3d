@@ -17,7 +17,7 @@ const {chromium}=require('/Users/cain/.cache/codex-runtimes/codex-primary-runtim
    assert.equal((await page.evaluate(()=>App.activeScene.storyQuest.collected)).length,i+1);
    await page.screenshot({path:`/Users/cain/Desktop/照片/npc-${i}.png`});
  }
- await page.evaluate(()=>App._questSave);assert.equal(await page.locator('#quest-stars').textContent(),'★ ★ ★');assert.ok(await page.locator('#quest-replay').isVisible());
+ await page.evaluate(()=>App._questSave);assert.equal(await page.locator('#quest-stars').textContent(),'★ ★ ★');assert.equal(await page.locator('#quest-panel').count(),0);const badge=await page.locator('#star-progress').boundingBox();assert.ok(badge.x>1100&&badge.y>800);
  await page.screenshot({path:'/Users/cain/Desktop/照片/npc-quest-complete.png'});
  await page.locator('#back-btn').click();await page.locator('.scene-card').first().click();await page.waitForFunction(()=>App.three?.npcs&&!App._entering,{},{timeout:60000});assert.equal((await page.evaluate(()=>App.activeScene.storyQuest.collected)).length,3);
  await page.locator('#story-btn').click();assert.equal(await page.evaluate(()=>App.three.character._enabled),false);
