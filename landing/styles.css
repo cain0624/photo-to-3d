@@ -9,8 +9,8 @@
 /* Keep the photo preview below the opening viewport. */
 .hero-content{min-height:calc(100svh - 147px);padding-bottom:48px}.hero .showcase{margin-top:32px}@media(max-width:700px){.hero-content{min-height:calc(100svh - 134px);padding-bottom:40px}}
 
-/* Richer, denser first-screen veil; the photo wall remains underneath. */
+/* Midnight veil with layered plum, violet, indigo and teal light. */
 .hero-background{height:max(850px,100svh)}
-.hero-tint{background:linear-gradient(180deg,rgba(8,5,27,.98) 0%,rgba(17,9,49,.96) 16%,rgba(35,20,94,.90) 30%,rgba(20,70,151,.76) 48%,rgba(35,113,155,.42) 67%,transparent 82%)}
-.hero-tint:before{background:radial-gradient(ellipse 58% 58% at 12% 20%,rgba(91,24,82,.28),transparent 76%),radial-gradient(ellipse 52% 55% at 88% 37%,rgba(26,117,140,.28),transparent 74%),radial-gradient(ellipse 38% 42% at 50% 30%,rgba(17,21,61,.44),transparent 82%)}
-@media(max-width:700px){.hero-background{height:max(780px,100svh)}.hero-tint{background:linear-gradient(180deg,rgba(8,5,27,.99),rgba(17,9,49,.97) 18%,rgba(35,20,94,.92) 32%,rgba(20,70,151,.78) 50%,rgba(35,113,155,.40) 70%,transparent 84%)}}
+.hero-tint{background:linear-gradient(180deg,rgba(3,2,13,1) 0%,rgba(8,4,26,.99) 15%,rgba(24,9,54,.97) 29%,rgba(39,21,91,.92) 40%,rgba(21,48,112,.83) 52%,rgba(18,83,114,.56) 67%,transparent 82%)}
+.hero-tint:before{background:linear-gradient(180deg,rgba(2,1,10,.80),transparent 35%),radial-gradient(ellipse 48% 44% at 8% 40%,rgba(145,31,94,.32),transparent 78%),radial-gradient(ellipse 42% 48% at 49% 46%,rgba(86,39,176,.34),transparent 78%),radial-gradient(ellipse 48% 48% at 93% 57%,rgba(16,139,159,.32),transparent 78%),radial-gradient(ellipse 32% 30% at 28% 64%,rgba(48,83,187,.20),transparent 82%)}
+@media(max-width:700px){.hero-background{height:max(780px,100svh)}.hero-tint{background:linear-gradient(180deg,rgba(3,2,13,1),rgba(8,4,26,1) 17%,rgba(24,9,54,.98) 31%,rgba(39,21,91,.94) 42%,rgba(21,48,112,.85) 54%,rgba(18,83,114,.54) 70%,transparent 84%)}}
