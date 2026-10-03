@@ -5,6 +5,7 @@ import { Storage } from './storage.js';
 import { estimateDepth, depthToDataURL } from './depth-estimator.js';
 import { SceneBuilder } from './scene-builder.js';
 import { Character } from './character.js';
+import { DEFAULT_STORY, parseStory, placeNPCs, StoryNPCs } from './story-npcs.js';
 import { startPhotoMorph } from './conversion.js';
 import { reconstruct, serviceUrl, refreshMarble } from './reconstruction.js';
 
@@ -83,6 +84,7 @@ const App = {
 
     this.bindWallEvents();
     this.bindServiceSettings();
+    this.bindStoryControls();
     // One-time cleanup of the older demo scenes and archives.
     if (!localStorage.getItem('lakeside-only-v1')) {
       for (const scene of await Storage.getAll()) {
@@ -253,6 +255,81 @@ const App = {
     };
   },
 
+  bindStoryControls() {
+    const dialog=document.getElementById('story-dialog'),input=document.getElementById('story-input'),save=document.getElementById('story-save'),status=document.getElementById('story-status');
+    document.getElementById('story-btn').onclick=()=>{
+      if(!this.three?.character || this._entering)return;
+      this._storyWasEnabled=this.three.character._enabled;this.three.character.setEnabled(false);this.three.character.keys={};
+      input.value=this.activeScene.storyQuest?.text || DEFAULT_STORY;status.textContent='';dialog.showModal();this.previewStory();input.focus();
+    };
+    document.getElementById('story-close').onclick=()=>dialog.close();
+    dialog.addEventListener('close',()=>{if(this.three&&!this._entering){this.three.character.keys={};this.three.character.setEnabled(this._storyWasEnabled);}});
+    input.addEventListener('input',()=>this.previewStory());
+    save.onclick=async()=>{
+      const rec=this.activeScene,t=this.three;if(!rec||!t)return;
+      save.disabled=true;
+      try {
+        const text=input.value.trim(),npcs=placeNPCs(parseStory(text),t.meta,rec);
+        const quest={text,npcs,collected:[],createdAt:Date.now()};
+        await this._questSave;await Storage.put({...rec,storyQuest:quest});
+        if(this.three!==t||this.activeScene!==rec)return;
+        rec.storyQuest=quest;await this.installStory(rec);dialog.close();this.questToast('三位新朋友已来到场景。靠近他们，收集三颗星。');
+      }catch(e){status.textContent=e.message||'故事保存失败，请重试';}
+      finally{save.disabled=false;}
+    };
+    document.getElementById('quest-replay').onclick=async()=>{
+      const rec=this.activeScene,button=document.getElementById('quest-replay');if(!rec)return;
+      button.disabled=true;
+      try {await this._questSave;const quest={...rec.storyQuest,collected:[]};await Storage.put({...rec,storyQuest:quest});if(this.activeScene!==rec)return;rec.storyQuest=quest;await this.installStory(rec);this.questToast('星星重新亮起，出发吧。');}
+      catch(e){this.questToast('进度保存失败，请重试。');}finally{button.disabled=false;}
+    };
+  },
+
+  previewStory() {
+    const preview=document.getElementById('story-preview'),status=document.getElementById('story-status'),save=document.getElementById('story-save');preview.replaceChildren();
+    try {
+      const npcs=parseStory(document.getElementById('story-input').value);
+      const placed=placeNPCs(npcs,this.three.meta,this.activeScene);
+      for(const npc of placed){const card=document.createElement('div');card.className='story-npc';const name=document.createElement('strong');name.textContent=npc.name;const where=document.createElement('span');where.textContent=({tree:'树下',house:'房屋旁',shore:'岸边',nearby:'附近'}[npc.location])+' · '+(npc.placement==='出生点附近'?'起点周边':'场景地物')+' · 1 星';card.append(name,where);preview.append(card);}
+      status.textContent='三位 NPC 已识别，确认后放入当前场景。';save.disabled=false;
+    }catch(e){status.textContent=e.message;save.disabled=true;}
+  },
+
+  async installStory(rec) {
+    const t=this.three;if(!t?.character)return;
+    if(!rec.storyQuest){
+      const text=rec.id==='default-111'?DEFAULT_STORY:'起点附近有位旅人。前方遇到了小猫。路旁见到了小兔。';
+      const quest={text,npcs:placeNPCs(parseStory(text),t.meta,rec),collected:[],createdAt:Date.now()};
+      await Storage.put({...rec,storyQuest:quest});if(this.three!==t)return;rec.storyQuest=quest;
+    }
+    t.npcs?.dispose();
+    t.npcs=new StoryNPCs(t.scene,t.meta,rec.storyQuest.npcs,rec.storyQuest.collected,npc=>{
+      if(this.three!==t || rec.storyQuest.collected.includes(npc.id))return;
+      rec.storyQuest.collected.push(npc.id);this.renderQuest();
+      const count=rec.storyQuest.collected.length;
+      this.questToast(count===3?'三星任务完成！你找到了照片里的三位朋友。':`遇见${npc.name}，收集一颗星 · ${count}/3`);
+      const snapshot=structuredClone(rec);
+      this._questSave=(this._questSave||Promise.resolve()).then(()=>Storage.put(snapshot)).catch(()=>{if(this.activeScene===rec)this.questToast('本机存档失败，当前探索仍可继续。');});
+    });
+    this._questListKey=null;this.renderQuest();
+  },
+
+  renderQuest() {
+    const rec=this.activeScene,t=this.three,quest=rec?.storyQuest;if(!quest||!t?.character)return;
+    const count=quest.collected.length,stars=document.getElementById('quest-stars');stars.textContent=Array.from({length:3},(_,i)=>i<count?'★':'☆').join(' ');stars.setAttribute('aria-label',`已收集 ${count} / 3 颗星`);
+    document.querySelector('.quest-heading span').textContent=rec.id==='default-111'?'湖岸的三个相遇':'照片里的三个相遇';
+    document.getElementById('quest-summary').textContent=count===3?'三星集齐，故事中的相遇都找到了。':'靠近 NPC 自动收星 · '+count+'/3';
+    document.getElementById('quest-replay').hidden=count!==3;
+    const distances=quest.npcs.map(n=>Math.round(Math.hypot(n.x-t.character.pos.x,n.z-t.character.pos.z)));
+    const key=quest.text+quest.collected.join()+distances.join();if(key===this._questListKey)return;this._questListKey=key;
+    const list=document.getElementById('quest-list');list.replaceChildren();
+    quest.npcs.forEach((npc,i)=>{const li=document.createElement('li'),name=document.createElement('span'),state=document.createElement('small'),done=quest.collected.includes(npc.id);name.textContent=(done?'★ ':'☆ ')+npc.name;state.textContent=done?'已相遇':distances[i]+' 米';li.classList.toggle('done',done);li.append(name,state);list.append(li);});
+  },
+
+  questToast(text) {
+    const el=document.getElementById('quest-toast');el.textContent=text;el.classList.add('visible');clearTimeout(this._toastTimer);this._toastTimer=setTimeout(()=>el.classList.remove('visible'),3500);
+  },
+
   // ----- 进入 3D 场景 -----
   async enterScene(id) {
     if (this._entering) return;
@@ -276,6 +353,7 @@ const App = {
     this.enterHint.classList.add('hidden');
 
     try {
+      await this._questSave;
       const rec = await Storage.get(id);
       if (!rec) throw new Error('场景不存在');
       if (token !== this._enterToken) return;
@@ -452,6 +530,9 @@ const App = {
       const dt = clock.getDelta();
       character.update(dt);
       builder.update(dt);
+      this.three?.npcs?.update(dt, character);
+      this._questTick=(this._questTick||0)+dt;
+      if(this._questTick>.25){this._questTick=0;this.renderQuest();}
       if(rec.plan){dir.target.position.copy(character.group.position);dir.position.copy(dir.target.position).addScaledVector(new THREE.Vector3(...rec.plan.lighting.sunDirection).normalize(),100);}
       if(this.three?.formationStarted){const p=Math.min(1,(performance.now()-this.three.formationStarted)/3000);builder.setFormation(p*p*(3-2*p));}
       if (focus) {
@@ -479,6 +560,7 @@ const App = {
 
     this.three = { renderer, scene, camera, builder, character, clock, raf, onResize, img, depth, meta, focus, grassImage };
 
+    await this.installStory(rec);
     // 绑定场景内控件
     this.bindSceneControls(rec);
   },
@@ -509,7 +591,7 @@ const App = {
     // 点击画布激活操控
     const canvas = document.getElementById('scene-canvas');
     const onCanvasDown = () => {
-      if (this.three) this.three.character.setEnabled(true);
+      if (this.three && !this._entering && !document.getElementById('story-dialog').open) this.three.character.setEnabled(true);
       this.enterHint.classList.add('hidden');
     };
     canvas.addEventListener('pointerdown', onCanvasDown);
@@ -533,6 +615,7 @@ const App = {
     scene.fog.color = res.fogColor;
     scene.background = res.fogColor.clone();
     this.three.meta = res.meta;
+    await this.installStory(rec);
   },
 
   exitScene() {
@@ -544,6 +627,9 @@ const App = {
     this.loadingOverlay.classList.add('hidden');
     this.loadingOverlay.setAttribute('aria-hidden', 'true');
     this.sceneView.classList.remove('is-converting');
+    document.getElementById('story-dialog').close();
+    clearTimeout(this._toastTimer);
+    document.getElementById('quest-toast').classList.remove('visible');
     this.disposeThree();
     this.showSceneView(false);
     this.activeScene = null;
@@ -556,6 +642,7 @@ const App = {
     window.removeEventListener('resize', t.onResize);
     const canvas = document.getElementById('scene-canvas');
     if (this._onCanvasDown) canvas.removeEventListener('pointerdown', this._onCanvasDown);
+    t.npcs?.dispose();
     t.character?.dispose();
     t.builder?.dispose();
     t.focus?.quad.geometry.dispose();

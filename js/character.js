@@ -83,6 +83,7 @@ export class Character {
 
   _bindEvents() {
     this._onKeyDown = e => {
+      if(e.target.closest?.('input,textarea,select,dialog,[contenteditable]'))return;
       this.keys[e.code] = true;
       if (['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight'].includes(e.code) && this._enabled) e.preventDefault();
     };

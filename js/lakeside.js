@@ -266,5 +266,5 @@ export function buildLakeside(image, grassImage) {
     blades.setColorAt(i,new THREE.Color(0x315f20).lerp(new THREE.Color(0x789444),rand(i*11+2)));
   }
   blades.instanceMatrix.needsUpdate=true;blades.castShadow=false;blades.frustumCulled=false;group.add(blades);
-  return {group,resources,update(dt){skyUniforms.uTime.value+=dt;waterUniforms.uTime.value+=dt;},meta:{groundY:terrain(0,45),heightAt:terrain,bounds:{minX:-520,maxX:520,minZ:4,maxZ:760}},fogColor:new THREE.Color(0x96968f)};
+  return {group,resources,update(dt){skyUniforms.uTime.value+=dt;waterUniforms.uTime.value+=dt;},meta:{storyAnchors:{tree:{x:11.3,z:23.2},house:{x:-8.7,z:12},shore:{x:5,z:5.2}},groundY:terrain(0,45),heightAt:terrain,bounds:{minX:-520,maxX:520,minZ:4,maxZ:760}},fogColor:new THREE.Color(0x96968f)};
 }

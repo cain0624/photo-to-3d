@@ -68,6 +68,7 @@
       <button id="back-btn" class="btn ghost">← 返回照片墙</button>
       <div class="scene-title" id="scene-title">场景</div>
       <div class="spacer"></div>
+      <button id="story-btn" class="btn ghost">＋ 照片故事 / NPC</button>
       <button id="regen-btn" class="btn ghost" title="重新生成深度">↻ 重生成</button>
     </div>
 
@@ -92,10 +93,29 @@
       </div>
     </div>
 
+    <aside id="quest-panel" aria-label="三星探索任务">
+      <div class="quest-heading"><span>湖岸的三个相遇</span><strong id="quest-stars" aria-label="已收集零颗星">☆ ☆ ☆</strong></div>
+      <p id="quest-summary">找到三位 NPC，靠近各收集一颗星。</p>
+      <ul id="quest-list"></ul>
+      <button id="quest-replay" class="btn ghost" hidden>再探索一次</button>
+    </aside>
+    <div id="quest-toast" role="status" aria-live="polite"></div>
     <!-- 角色指示 -->
     <div id="enter-hint" class="enter-hint">点击场景以激活操控</div>
   </section>
 
+  <dialog id="story-dialog" aria-labelledby="story-heading">
+    <div class="story-heading"><div><p class="story-eyebrow">给照片里的世界添一点故事</p><h2 id="story-heading">在这里，你遇见了谁？</h2></div><button id="story-close" class="btn ghost" aria-label="关闭照片故事">关闭</button></div>
+    <label for="story-input">照片故事</label>
+    <textarea id="story-input" rows="5" maxlength="1000" placeholder="在树下见到了松鼠。
+房子旁边有个砍树大叔。
+湖边有螃蟹。"></textarea>
+    <p class="story-help">用三句话或三行描述三位角色和位置。支持松鼠、螃蟹、伐木人、兔、猫、狗；其他人物使用旅人造型。每位 NPC 带一颗星。</p>
+    <div id="story-preview" aria-label="NPC 预览"></div>
+    <p id="story-status" role="status"></p>
+    <div class="story-actions"><span>保存新故事会重新开始三星任务</span><button id="story-save" class="btn primary">创建 3 位 NPC</button></div>
+    <p class="story-footnote">故事在浏览器内按关键词解析。没有对应地物的位置会放在可行走的出生点附近。故事与进度仅保存在这台设备。</p>
+  </dialog>
   <dialog id="service-dialog">
     <h2>连接照片转换服务</h2>
     <p>先在电脑启动本地后端，再连接服务。照片会发送到后端配置的服务。Marble 将生成可探索的三维世界，通常需要等待几分钟；生成会消耗你的 World API 额度。</p>

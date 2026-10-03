@@ -38,7 +38,16 @@ export function collisionMeta(collider) {
     }
     last={x,z,y:hit.point.y};return true;
   }
-  return {bounds:{minX:box.min.x+.5,maxX:box.max.x-.5,minZ:box.min.z+.5,maxZ:box.max.z-.5},spawn,
+  // Probe an NPC destination along grounded steps without changing the player's collision state.
+  function npcGround(x,z){
+    const saved=last;last={...spawn};
+    try {
+      const steps=Math.max(1,Math.ceil(Math.hypot(x-spawn.x,z-spawn.z)/.35));
+      for(let i=1;i<=steps;i++)if(!canWalk(spawn.x+(x-spawn.x)*i/steps,spawn.z+(z-spawn.z)*i/steps))return NaN;
+      return last.y;
+    }finally{last=saved;}
+  }
+  return {npcGround,bounds:{minX:box.min.x+.5,maxX:box.max.x-.5,minZ:box.min.z+.5,maxZ:box.max.z-.5},spawn,
     heightAt:(x,z)=>floor(x,z,last.y)?.point.y??last.y,canWalk,resetGround:()=>{last={...spawn};}};
 }
 export async function buildMarble(world,renderer) {

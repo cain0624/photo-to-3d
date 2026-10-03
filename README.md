@@ -63,3 +63,13 @@ Three.js 经 jsDelivr 加载，浏览器需支持 WebGL。`main` 分支推送后
 `node tests/marble-browser.cjs` 使用合成 Gaussian Splat、碰撞 GLB 和模拟 API，验证生成时刷新恢复、真实 Spark 渲染、地面/墙体/边界碰撞、存档重开不再生成，以及默认场景回归。尚未使用用户照片调用真实 Marble 生成，需配置密钥和 API 额度后验证。
 
 官方文档：[World API 图片输入](https://docs.worldlabs.ai/api/world-generation-examples)、[模型名称](https://docs.worldlabs.ai/api/models)、[尺度与坐标](https://docs.worldlabs.ai/api/rendering-spz)。
+
+## 照片故事与三星任务
+
+进入场景，点击“照片故事 / NPC”，用三句话或三行分别描述三位角色与位置，预览后创建 NPC。默认 111 场景包含树下的松鼠、木屋旁的砍树大叔和湖边的螃蟹；靠近每位 NPC（约 2.7 米、地面高度接近）自动获得一颗星，同一位只计一次。集齐后可“再探索一次”。
+
+故事、NPC 位置与收星进度存入对应场景的 IndexedDB 记录；重新进入保留进度，各场景独立。创建新故事会重置该场景任务。原有存档第一次进入时会增加默认任务。
+
+当前使用浏览器关键词解析，无需模型服务。支持松鼠、伐木人、螃蟹、兔、猫、狗，其他名称使用旅人造型；不是任意角色的 AI 建模。默认场景有明确树、房屋、岸边锚点；场景描述模式按已有地物定位并寻找可行走位置。Marble splats 没有独立地物语义时，NPC 放在可到达的出生点周边，预览会标注。人物与 NPC 共用地形高度；非默认场景使用已有可行走查询排除墙体、水面与陡坡。
+
+运行 `node tests/story-npcs.cjs` 验证默认三位 NPC、贴地、收集距离、重复收星防止、存档恢复、故事编辑、输入隔离、其他场景独立任务、可行走位置和手机故事面板。
