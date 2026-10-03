@@ -11,6 +11,6 @@
 
 /* Richer, denser first-screen veil; the photo wall remains underneath. */
 .hero-background{height:max(850px,100svh)}
-.hero-tint{background:linear-gradient(180deg,rgba(29,14,78,.88) 0%,rgba(49,29,128,.82) 24%,rgba(20,70,151,.76) 48%,rgba(35,113,155,.42) 67%,transparent 82%)}
-.hero-tint:before{background:radial-gradient(ellipse 58% 58% at 12% 20%,rgba(138,37,113,.48),transparent 76%),radial-gradient(ellipse 52% 55% at 88% 37%,rgba(26,150,163,.38),transparent 74%),radial-gradient(ellipse 38% 42% at 50% 30%,rgba(17,21,61,.44),transparent 82%)}
-@media(max-width:700px){.hero-background{height:max(780px,100svh)}.hero-tint{background:linear-gradient(180deg,rgba(29,14,78,.90),rgba(49,29,128,.84) 27%,rgba(20,70,151,.78) 50%,rgba(35,113,155,.40) 70%,transparent 84%)}}
+.hero-tint{background:linear-gradient(180deg,rgba(8,5,27,.98) 0%,rgba(17,9,49,.96) 16%,rgba(35,20,94,.90) 30%,rgba(20,70,151,.76) 48%,rgba(35,113,155,.42) 67%,transparent 82%)}
+.hero-tint:before{background:radial-gradient(ellipse 58% 58% at 12% 20%,rgba(91,24,82,.28),transparent 76%),radial-gradient(ellipse 52% 55% at 88% 37%,rgba(26,117,140,.28),transparent 74%),radial-gradient(ellipse 38% 42% at 50% 30%,rgba(17,21,61,.44),transparent 82%)}
+@media(max-width:700px){.hero-background{height:max(780px,100svh)}.hero-tint{background:linear-gradient(180deg,rgba(8,5,27,.99),rgba(17,9,49,.97) 18%,rgba(35,20,94,.92) 32%,rgba(20,70,151,.78) 50%,rgba(35,113,155,.40) 70%,transparent 84%)}}
